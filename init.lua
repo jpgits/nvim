@@ -10,200 +10,104 @@ if not vim.loop.fs_stat(lazypath) then
     lazypath,
   })
 end
-vim.opt.rtp:prepend(lazypath)
+vim.opt.clipboard = 'unnamedplus'
 
+vim.opt.rtp:prepend(lazypath)
 vim.opt.number = true
 vim.opt.relativenumber = true
--- 'jj' を ESC キーとしてマッピング
-vim.api.nvim_set_keymap('i', 'jj', '<ESC>', { noremap = true, silent = true })
-
--- ヤンク (コピー) を Ctrl+C にマッピング
-vim.api.nvim_set_keymap('v', '<C-c>', '"+y', { noremap = true, silent = true })
-
--- ペーストを Ctrl+V にマッピング
-vim.api.nvim_set_keymap('n', '<C-v>', '"+p', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('i', '<C-v>', '<C-r>+', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('i', '<C-f>', '<Right>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('i', '<C-h>', '<BS>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', 'x', '"_x', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', 'd', '"_d', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', 'c', '"_c', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('v', 'x', '"_x', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('v', 'd', '"_d', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('v', 'c', '"_c', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', '<leader>e', ':NvimTreeToggle<CR>', { noremap = true, silent = true })
--- システムクリップボードを使う
-vim.opt.clipboard = "unnamedplus"
-
--- lazy.nvimを使用したプラグインのセットアップ
-require("lazy").setup({
-
-  -- Telescope
-  {
-    "nvim-telescope/telescope.nvim",
-    requires = { "nvim-lua/plenary.nvim" },
-    config = function()
-      require("telescope").setup{
-        defaults = {
-          file_ignore_patterns = { "deps", "_build" },  -- Elixirプロジェクト特有のフォルダを除外
+-- lazy.nvimのセットアップ
+require('lazy').setup({
+    -- LSPサポート
+    {
+        'neovim/nvim-lspconfig',
+        dependencies = {
+            'williamboman/mason.nvim', -- LSPサーバーの自動インストール
+            'williamboman/mason-lspconfig.nvim', -- Masonとlspconfigの統合
         },
-      }
-    end,
-  },
--- Elixir LSP
-{
-  "neovim/nvim-lspconfig",
-  config = function()
-    local lspconfig = require("lspconfig")
+    },
+    -- オートコンプリートエンジン
+    {
+        'hrsh7th/nvim-cmp', -- 補完プラグイン
+        dependencies = {
+            'hrsh7th/cmp-nvim-lsp', -- LSPを使った補完
+            'hrsh7th/cmp-buffer', -- バッファ補完
+            'hrsh7th/cmp-path', -- パス補完
+            'hrsh7th/cmp-cmdline', -- コマンドライン補完
+        },
+    },
+    -- スニペットサポート
+    {
+        'L3MON4D3/LuaSnip', -- スニペットエンジン
+        dependencies = {
+            'saadparwaiz1/cmp_luasnip', -- cmpとスニペットの連携
+        },
+    },
+})
 
-    -- ElixirLS
-    lspconfig.elixirls.setup({
-      cmd = { "/Users/aran/.config/nvim/elixir-ls/scripts/language_server.sh" }, -- ElixirLSのパスを指定
-      settings = {
-        elixirLS = {
-          dialyzerEnabled = false,   -- Dialyzer（静的コード解析ツール）を無効化
-          fetchDeps = false,         -- 自動依存関係取得を無効化
-        }
-      },
+-- Masonの設定とLSPサーバーのインストール
+require('mason').setup()
+require('mason-lspconfig').setup({
+    ensure_installed = { 'pyright', 'html', 'cssls', 'ts_ls' }, -- インストールするLSPサーバー
+})
+
+-- LSPサーバーの設定
+local lspconfig = require('lspconfig')
+
+-- Python用LSPサーバー
+lspconfig.pyright.setup{}
+
+-- HTML用LSPサーバー
+lspconfig.html.setup{}
+
+-- CSS用LSPサーバー
+lspconfig.cssls.setup{}
+
+-- JavaScript/TypeScript用LSPサーバー
+lspconfig.ts_ls.setup{}
+
+-- nvim-cmpの設定
+local cmp = require('cmp')
+
+cmp.setup({
+    snippet = {
+        expand = function(args)
+            require('luasnip').lsp_expand(args.body)
+        end,
+    },
+    mapping = cmp.mapping.preset.insert({
+        ['<C-b>'] = cmp.mapping.scroll_docs(-4),
+        ['<C-f>'] = cmp.mapping.scroll_docs(4),
+        ['<C-Space>'] = cmp.mapping.complete(),
+        ['<C-e>'] = cmp.mapping.abort(),
+        ['<CR>'] = cmp.mapping.confirm({ select = true }), -- Enterキーで補完を確定
+    }),
+    sources = cmp.config.sources({
+        { name = 'nvim_lsp' },
+        { name = 'luasnip' }, -- スニペット補完
+    }, {
+        { name = 'buffer' }, -- バッファからの補完
+        { name = 'path' },   -- パスの補完
     })
+})
 
-    -- Python LSP (pyright)
-    lspconfig.pyright.setup{}
-
-    -- HTML LSP
-    require("lspconfig").html.setup{
-      cmd = { "vscode-html-language-server", "--stdio" },
-    }
-    -- TailwindCSS LSP
-    lspconfig.tailwindcss.setup({
-      cmd = { "tailwindcss-language-server", "--stdio" }  -- グローバルにインストールされたものを使用
-    })
+-- jjで挿入モードからノーマルモードに戻る設定
+vim.api.nvim_set_keymap('i', 'jj', '<Esc>', { noremap = true, silent = true })
+-- HTML, CSS, JS の場合タブ幅2に設定
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "html", "css", "javascript" },
+  callback = function()
+    vim.opt_local.tabstop = 2      -- タブ幅を2に
+    vim.opt_local.shiftwidth = 2   -- インデント幅を2に
+    vim.opt_local.expandtab = true -- タブをスペースに変換
   end,
-},
-  -- 補完エンジン
-  { "hrsh7th/nvim-cmp" },
-  { "hrsh7th/cmp-nvim-lsp" },
+})
 
-  -- スニペットエンジン
-  { "L3MON4D3/LuaSnip" },
-  { "saadparwaiz1/cmp_luasnip" },
-
-  -- Treesitter (シンタックスハイライト)
-  {
-    "nvim-treesitter/nvim-treesitter",
-    run = ":TSUpdate",
-    config = function()
-      require("nvim-treesitter.configs").setup {
-        ensure_installed = { "elixir", "heex", "eex", "html", "css", "javascript", "python" },
-        highlight = {
-          enable = true,
-        },
-      }
-    end,
-  },
-
-  -- Lualine (ステータスライン)
-  {
-    "nvim-lualine/lualine.nvim",
-    config = function()
-      require("lualine").setup({
-        options = {
-          theme = "gruvbox",  -- テーマを設定
-          section_separators = '',
-          component_separators = '',
-        },
-        sections = {
-          lualine_c = {'filename', 'branch'},
-          lualine_x = {'encoding', 'fileformat', 'filetype'},
-        },
-      })
-    end,
-  },
-
-  -- Mason (LSPサーバーの管理)
-  {
-    "williamboman/mason.nvim",
-    "williamboman/mason-lspconfig.nvim",
-    config = function()
-      require("mason").setup()
-      require("mason-lspconfig").setup({
-        ensure_installed = { "elixirls", "pyright", "html", "tailwindcss" },
-      })
-    end,
-  },
-
-  -- Formatter (コードフォーマッタ)
-  {
-    "mhartington/formatter.nvim",
-    config = function()
-      require("formatter").setup({
-        filetype = {
-          elixir = {
-            function()
-              return {
-                exe = "mix",
-                args = { "format", "-" },
-                stdin = true,
-              }
-            end,
-          },
-          python = {
-            function()
-              return {
-                exe = "black", -- Pythonのフォーマッタ
-                args = { "--fast", "-" },
-                stdin = true,
-              }
-            end,
-          },
-          html = {
-            function()
-              return {
-                exe = "prettier", -- Prettierを使ってHTMLを整形
-                args = { "--stdin-filepath", vim.api.nvim_buf_get_name(0) },
-                stdin = true,
-              }
-            end,
-          },
-          css = {
-            function()
-              return {
-                exe = "prettier", -- Prettierを使ってCSSを整形
-                args = { "--stdin-filepath", vim.api.nvim_buf_get_name(0) },
-                stdin = true,
-              }
-            end,
-          },
-        },
-      })
-    end,
-  },
-  -- nvim-tree
-  {
-    "nvim-tree/nvim-tree.lua",
-    requires = { "nvim-tree/nvim-web-devicons" },
-    config = function()
-      require("nvim-tree").setup({
-        view = {
-          width = 30,
-        },
-      })
-    end,
-  },
-
-  -- TailwindCSS補完
-  {
-    "roobert/tailwindcss-colorizer-cmp.nvim",
-    config = function()
-      require("tailwindcss-colorizer-cmp").setup({
-        color_square_width = 2,
-      })
-    end,
-  },
-  {
-    "numToStr/Comment.nvim",
-    config = function()
-      require('Comment').setup()
-    end
-  },
+-- Python の場合タブ幅4に設定
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "python",
+  callback = function()
+    vim.opt_local.tabstop = 4      -- タブ幅を4に
+    vim.opt_local.shiftwidth = 4   -- インデント幅を4に
+    vim.opt_local.expandtab = true -- タブをスペースに変換
+  end,
 })
